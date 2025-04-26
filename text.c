@@ -3,7 +3,6 @@
 
 #include "dat.h"
 #include "utf/utf.h"
-#include "util.h"
 
 void
 bufprint(Buffer *buf)

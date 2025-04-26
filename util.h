@@ -12,22 +12,22 @@
 
 #define ARG (argc > 1 ? (argc--, *(++argv)): nil)
 #define OPTS(body) \
-		_setprogname(&progname, *argv);\
+	_setprogname(&progname, *argv);\
+	argc--;\
+	argv++;\
+	while (argc > 0) {\
+		if (**argv != '-')\
+			break;\
+		else {\
+			for (char *opts = *argv + 1; *opts; opts++) {\
+				switch (*opts) {\
+					body\
+				}\
+			}\
 			argc--;\
-				argv++;\
-					while (argc > 0) {\
-								if (**argv != '-')\
-									break;\
-								else {\
-												for (char *opts = *argv + 1; *opts; opts++) {\
-																	switch (*opts) {\
-																						body\
-																						}\
-																}\
-												argc--;\
-												argv++;\
-											}\
-							}
+			argv++;\
+		}\
+	}
 
 typedef long long vlong;
 
