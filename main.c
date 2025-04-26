@@ -289,9 +289,8 @@ main(int argc, char *argv[])
 	if ((v->root->buf = bufcreate(BUFFER_INIT_SIZE)) == nil)
 		sysfatal("cannot create buffer");
 	//panecnt = 0;
-	v->root = panevsplit(v->root);
-	panedrawborders(v->root);
-	focus = v->root->left;
+	focus = v->root;
+	panedrawborders(focus);
 	panefocus(focus);
 
 	quit = 0;
@@ -302,6 +301,8 @@ main(int argc, char *argv[])
 		case 's':
 			if ((split = panehsplit(focus)) == nil)
 				sysfatal("cannot split pane horizontally");
+			if (focus == v->root)
+					v->root = split;
 			focus = split->right;
 			panedrawborders(v->root);
 			panefocus(focus);
@@ -309,6 +310,8 @@ main(int argc, char *argv[])
 		case 'v':
 			if ((split = panevsplit(focus)) == nil)
 				sysfatal("cannot split pane vertically");
+			if (focus == v->root)
+					v->root = split;
 			focus = split->right;
 			panedrawborders(v->root);
 			panefocus(focus);
