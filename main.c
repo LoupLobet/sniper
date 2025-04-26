@@ -3,7 +3,18 @@
 
 #include "dat.h"
 
-#define PANE_CENTER(pn, x, y) do { x = pn->x + pn->w/2; y = pn->y + pn->h / 2; } while(0);
+#define ABS(n) (n < 0 ? -n : n)
+#define PANE_DISTANCE_X(pn1, pn2) ABS(((pn1->x + pn1->w / 2) - (pn2->x + pn2->w / 2)))
+#define PANE_DISTANCE_Y(pn1, pn2) ABS(((pn1->y + pn1->h / 2) - (pn2->y + pn2->h / 2)))
+#define PANE_CLOSEST_CHILD(pn, ref) \
+	(pn->type == VERTICAL \
+		? (PANE_DISTANCE_X(ref, pn->right) < PANE_DISTANCE_X(ref, pn->left) \
+			? pn->right \
+			: pn->left) \
+		: (PANE_DISTANCE_Y(ref, pn->right) < PANE_DISTANCE_Y(ref, pn->left) \
+			? pn->right \
+			: pn->left) \
+	)
 
 Pane *
 panecreate(int y, int x, int h, int w)
@@ -83,7 +94,7 @@ panemovefocusdown(Pane *pn)
 		if (current->parent->type == HORIZONTAL && current == current->parent->left) {
 			candidate = current->parent->right;
 			while (candidate->type != LEAF) {
-				candidate = (candidate->left != nil ? candidate->left : candidate->right);
+				candidate = PANE_CLOSEST_CHILD(candidate, pn);
 			}
 			panefocus(candidate);
 			return candidate;
@@ -103,10 +114,7 @@ panemovefocusleft(Pane *pn)
 		if (current->parent->type == VERTICAL && current == current->parent->right) {
 			candidate = current->parent->left;
 			while (candidate->type != LEAF) {
-				if (candidate->type == VERTICAL)
-					candidate = (candidate->right != nil ? candidate->right : candidate->left);
-				else
-					candidate = (candidate->left != nil ? candidate->left : candidate->right);
+				candidate = PANE_CLOSEST_CHILD(candidate, pn);
 			}
 			panefocus(candidate);
 			return candidate;
@@ -126,7 +134,7 @@ panemovefocusright(Pane *pn)
 		if (current->parent->type == VERTICAL && current == current->parent->left) {
 			candidate = current->parent->right;
 			while (candidate->type != LEAF) {
-				candidate = (candidate->left != nil ? candidate->left : candidate->right);
+				candidate = PANE_CLOSEST_CHILD(candidate, pn);
 			}
 			panefocus(candidate);
 			return candidate;
@@ -146,10 +154,7 @@ panemovefocusup(Pane *pn)
 		if (current->parent->type == HORIZONTAL && current == current->parent->right) {
 			candidate = current->parent->left;
 			while (candidate->type != LEAF) {
-				if (candidate->type == HORIZONTAL)
-					candidate = (candidate->right != nil ? candidate->right : candidate->left);
-				else
-					candidate = (candidate->left != nil ? candidate->left : candidate->right);
+				candidate = PANE_CLOSEST_CHILD(candidate, pn);
 			}
 			panefocus(candidate);
 			return candidate;
