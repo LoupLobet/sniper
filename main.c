@@ -17,7 +17,7 @@
 	)
 
 Pane *
-panecreate(int y, int x, int h, int w)
+panecreate(int y, int x, int h, int w, Buffer *buf)
 {
 	Pane *pn;
 
@@ -33,16 +33,59 @@ panecreate(int y, int x, int h, int w)
 	pn->cursy = pn->cursx = 0;
 	pn->buf = nil;
 	pn->parent = nil;
-	if ((pn->buf = bufcreate(BUFFER_INIT_SIZE)) == nil) {
-		free(pn);
-		return nil;
-	}
+	pn->buf = buf;
 	return pn;
 }
 
-void
-panefocus(Pane *pn)
+Pane *
+viewdeletepane(View *v, Pane *pn)
 {
+	Pane *keep, *ret;
+
+	if (pn->parent == nil) {
+		v->root = nil;
+		v->focus = nil;
+		free(pn);
+		ret = nil;
+	} else if (pn->parent != nil && pn->parent->parent == nil) {
+		if (pn->parent->left == pn) {
+			keep = pn->parent->right;
+			ret = pn->parent->left;
+		} else {
+			keep = pn->parent->left;
+			ret = pn->parent->right;
+		}
+		v->root = keep;
+		keep->parent = v->root;
+		free(pn->parent);
+		free(pn);
+	} else {
+		if (pn->parent->left == pn) {
+			keep = pn->parent->right;
+			ret = pn->parent->left;
+			if (pn->parent->parent->left == pn->parent)
+				pn->parent->parent->left = keep;
+			else
+				pn->parent->parent->right = keep;
+		} else {
+			keep = pn->parent->left;
+			ret = pn->parent->right;
+			if (pn->parent->parent->right == pn->parent)
+				pn->parent->parent->right = keep;
+			else
+				pn->parent->parent->left = keep;
+		}
+		keep->parent = pn->parent->parent;
+		free(pn->parent);
+		free(pn);
+	}
+	return ret;
+}
+
+void
+viewfocuspane(View *v, Pane *pn)
+{
+	v->focus = pn;
 	move(pn->y + pn->cursy, pn->x + pn->cursx);
 }
 
@@ -57,11 +100,11 @@ panedrawborders(Pane *pn)
 		break;
 	case HORIZONTAL:
 		for (i = pn->x; i < (pn->x + pn->w); i++)
-			mvaddch(pn->left->y + pn->left->h, i, '-');
+			mvaddch(pn->left->y + pn->left->h, i, ACS_HLINE);
 		break;
 	case VERTICAL:
 		for (i = pn->y; i < (pn->y + pn->h); i++)
-			mvaddch(i, pn->left->x + pn->left->w, '|');
+			mvaddch(i, pn->left->x + pn->left->w, ACS_VLINE);
 		break;
 	}
 	panedrawborders(pn->left);
@@ -69,54 +112,36 @@ panedrawborders(Pane *pn)
 }
 
 int
-panemovecurs(Pane *pn, int y, int x)
+viewmovecurs(View *v, int y, int x)
 {
-	return panemovecursto(pn, pn->cursy + y,  pn->cursx + x);
+	return viewmovecursto(v, v->focus->cursy + y,  v->focus->cursx + x);
 }
 
 int
-panemovecursto(Pane *pn, int y, int x)
+viewmovecursto(View *v, int y, int x)
 {
-	if (0 <= y && y < pn->h)
-		pn->cursy = y;
-	if (0 <= x && x < pn->w)
-		pn->cursx = x;
-	return move(pn->y + pn->cursy, pn->x + pn->cursx);
+	if (0 <= y && y < v->focus->h)
+		v->focus->cursy = y;
+	if (0 <= x && x < v->focus->w)
+		v->focus->cursx = x;
+	return move(v->focus->y + v->focus->cursy, v->focus->x + v->focus->cursx);
 }
 
 Pane *
-panemovefocusdown(Pane *pn)
+viewfocusleftpane(View *v, Pane *pn, enum BspNodeType direction)
 {
 	Pane *current = pn;
 	Pane *candidate;
 
+	// BUG: Bug randomly appears where moving up creates a ghost pane with height 1
 	while (current->parent != nil) {
-		if (current->parent->type == HORIZONTAL && current == current->parent->left) {
-			candidate = current->parent->right;
-			while (candidate->type != LEAF) {
-				candidate = PANE_CLOSEST_CHILD(candidate, pn);
-			}
-			panefocus(candidate);
-			return candidate;
-		}
-		current = current->parent;
-	}
-	return pn;
-}
-
-Pane *
-panemovefocusleft(Pane *pn)
-{
-	Pane *current = pn;
-	Pane *candidate;
-
-	while (current->parent != nil) {
-		if (current->parent->type == VERTICAL && current == current->parent->right) {
+		if (current->parent->type == direction && current == current->parent->right) {
 			candidate = current->parent->left;
 			while (candidate->type != LEAF) {
 				candidate = PANE_CLOSEST_CHILD(candidate, pn);
 			}
-			panefocus(candidate);
+			v->focus = candidate;
+			viewfocuspane(v, candidate);
 			return candidate;
 		}
 		current = current->parent;
@@ -125,18 +150,20 @@ panemovefocusleft(Pane *pn)
 }
 
 Pane *
-panemovefocusright(Pane *pn)
+viewfocusrightpane(View *v, Pane *pn, enum BspNodeType direction)
 {
 	Pane *current = pn;
 	Pane *candidate;
 
+	// BUG: Bug randomly appears where moving up creates a ghost pane with height 1
 	while (current->parent != nil) {
-		if (current->parent->type == VERTICAL && current == current->parent->left) {
+		if (current->parent->type == direction && current == current->parent->left) {
 			candidate = current->parent->right;
 			while (candidate->type != LEAF) {
 				candidate = PANE_CLOSEST_CHILD(candidate, pn);
 			}
-			panefocus(candidate);
+			v->focus = candidate;
+			viewfocuspane(v, candidate);
 			return candidate;
 		}
 		current = current->parent;
@@ -145,27 +172,7 @@ panemovefocusright(Pane *pn)
 }
 
 Pane *
-panemovefocusup(Pane *pn)
-{
-	Pane *current = pn;
-	Pane *candidate;
-
-	while (current->parent != nil) {
-		if (current->parent->type == HORIZONTAL && current == current->parent->right) {
-			candidate = current->parent->left;
-			while (candidate->type != LEAF) {
-				candidate = PANE_CLOSEST_CHILD(candidate, pn);
-			}
-			panefocus(candidate);
-			return candidate;
-		}
-		current = current->parent;
-	}
-	return pn;
-}
-
-Pane *
-panehsplit(Pane *pn)
+viewsplithpane(View *v, Pane *pn)
 {
 	int h1, h2;
 	Pane *split;
@@ -183,11 +190,10 @@ panehsplit(Pane *pn)
 	 * and create the new pane for the right child.
 	 */
 	parent = pn->parent;
-	if ((split = panecreate(pn->y, pn->x, pn->h, pn->w)) == nil)
+	if ((split = panecreate(pn->y, pn->x, pn->h, pn->w, nil)) == nil)
 		return nil;
 	split->type = HORIZONTAL;
-	split->buf = nil;
-	if ((split->right = panecreate(pn->y + h1 + 1, pn->x, h2, pn->w)) == nil) {
+	if ((split->right = panecreate(pn->y + h1 + 1, pn->x, h2, pn->w, nil)) == nil) {
 		free(split);
 		return nil;
 	}
@@ -205,12 +211,14 @@ panehsplit(Pane *pn)
 		else
 			parent->left = split;
 		split->parent = parent;
+	} else {
+		v->root = split;
 	}
 	return split;
 }
 
 Pane *
-panevsplit(Pane *pn)
+viewsplitvpane(View *v, Pane *pn)
 {
 	int w1, w2;
 	Pane *split;
@@ -228,11 +236,10 @@ panevsplit(Pane *pn)
 	 * and create the new pane for the right child.
 	 */
 	parent = pn->parent;
-	if ((split = panecreate(pn->y, pn->x, pn->h, pn->w)) == nil)
+	if ((split = panecreate(pn->y, pn->x, pn->h, pn->w, nil)) == nil)
 		return nil;
 	split->type = VERTICAL;
-	split->buf = nil;
-	if ((split->right = panecreate(pn->y, pn->x + w1 + 1, pn->h, w2)) == nil) {
+	if ((split->right = panecreate(pn->y, pn->x + w1 + 1, pn->h, w2, nil)) == nil) {
 		free(split);
 		return nil;
 	}
@@ -250,6 +257,8 @@ panevsplit(Pane *pn)
 		else
 			parent->left = split;
 		split->parent = parent;
+	} else {
+		v->root = split;
 	}
 	return split;
 }
@@ -265,11 +274,11 @@ viewcreate(int y, int x, int h, int w)
 	v->x = x;
 	v->h = h;
 	v->w = w;
-	if ((v->root = panecreate(y, x, h, w)) == nil) {
+	if ((v->root = panecreate(y, x, h, w, nil)) == nil) {
 		free(v);
 		return nil;
 	}
-v->focus = v->root;
+	v->focus = v->root;
 	return v;
 }
 
@@ -278,8 +287,7 @@ main(int argc, char *argv[])
 {
 	View *v;
 	int c, quit;
-	Pane *focus;
-	Pane *split;
+	Pane *split, *del;
 	int scrh, scrw;
 
 	initscr();
@@ -293,10 +301,8 @@ main(int argc, char *argv[])
 		sysfatal("cannot create view");
 	if ((v->root->buf = bufcreate(BUFFER_INIT_SIZE)) == nil)
 		sysfatal("cannot create buffer");
-	//panecnt = 0;
-	focus = v->root;
-	panedrawborders(focus);
-	panefocus(focus);
+	panedrawborders(v->root);
+	viewfocuspane(v, v->focus);
 
 	quit = 0;
 	refresh();
@@ -304,46 +310,48 @@ main(int argc, char *argv[])
 		c = getch();
 		switch (c) {
 		case 's':
-			if ((split = panehsplit(focus)) == nil)
+			if ((split = viewsplithpane(v, v->focus)) == nil)
 				sysfatal("cannot split pane horizontally");
-			if (focus == v->root)
-					v->root = split;
-			focus = split->right;
 			panedrawborders(v->root);
-			panefocus(focus);
+			viewfocuspane(v, split->right);
 			break;
 		case 'v':
-			if ((split = panevsplit(focus)) == nil)
+			if ((split = viewsplitvpane(v, v->focus)) == nil)
 				sysfatal("cannot split pane vertically");
-			if (focus == v->root)
-					v->root = split;
-			focus = split->right;
 			panedrawborders(v->root);
-			panefocus(focus);
+			viewfocuspane(v, split->right);
+			break;
+		case 'd':
+			if (v->focus != v->root) {
+				if ((del = viewdeletepane(v, v->focus)) != nil) { 
+					viewfocuspane(v, del);
+				}
+				panedrawborders(v->root);
+			}
 			break;
 		case 'H':
-			focus = panemovefocusleft(focus);
+			viewfocusleftpane(v, v->focus, VERTICAL);
 			break;
 		case 'J':
-			focus = panemovefocusdown(focus);
+			viewfocusrightpane(v, v->focus, HORIZONTAL);
 			break;
 		case 'K':
-			focus = panemovefocusup(focus);
+			viewfocusleftpane(v, v->focus, HORIZONTAL);
 			break;
 		case 'L':
-			focus = panemovefocusright(focus);
+			viewfocusrightpane(v, v->focus, VERTICAL);
 			break;
 		case 'h':
-			panemovecurs(focus, 0, -1);
+			viewmovecurs(v, 0, -1);
 			break;
 		case 'l':
-			panemovecurs(focus, 0, 1);
+			viewmovecurs(v, 0, 1);
 			break;
 		case 'k':
-			panemovecurs(focus, -1, 0);
+			viewmovecurs(v, -1, 0);
 			break;
 		case 'j':
-			panemovecurs(focus, 1, 0);
+			viewmovecurs(v, 1, 0);
 			break;
 		case 'Q':
 			quit = 1;

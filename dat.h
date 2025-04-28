@@ -7,8 +7,8 @@ typedef struct Pane Pane;
 typedef struct View View;
 
 enum BspNodeType {
-	HORIZONTAL,
 	LEAF,
+	HORIZONTAL,
 	VERTICAL,
 };
 
@@ -52,17 +52,9 @@ struct Pane {
 	enum BspNodeType type;
 };
 
-Pane	*panecreate(int, int, int, int);
+Pane	*panecreate(int, int, int, int, Buffer *);
+Pane	*panedelete(Pane *);
 void	 panedrawborders(Pane *);
-void	 panefocus(Pane *);
-int	 panemovecurs(Pane *, int, int);
-int	 panemovecursto(Pane *, int, int);
-Pane	*panemovefocusdown(Pane *);
-Pane	*panemovefocusleft(Pane *);
-Pane	*panemovefocusright(Pane *);
-Pane	*panemovefocusup(Pane *);
-Pane	*panehsplit(Pane *);
-Pane	*panevsplit(Pane *);
 
 struct View {
 	int x, y;
@@ -72,3 +64,11 @@ struct View {
 };
 
 View	*viewcreate(int, int, int, int);
+Pane	*viewdeletepane(View *, Pane *);
+Pane	*viewfocusleftpane(View *, Pane *, enum BspNodeType);
+Pane	*viewfocusrightpane(View *, Pane *, enum BspNodeType);
+void	 viewfocuspane(View *, Pane *);
+int	 viewmovecurs(View *, int, int);
+int	 viewmovecursto(View *, int, int);
+Pane	*viewsplithpane(View *, Pane *);
+Pane	*viewsplitvpane(View *, Pane *);
